@@ -5,7 +5,6 @@ from typing import Optional
 from pydantic_settings import BaseSettings
 from pydantic import Field
 
-
 class DatabaseConfig(BaseSettings):
     """Configuración para bases de datos PostgreSQL."""
 
@@ -63,6 +62,19 @@ class AppConfig(BaseSettings):
         "extra": "ignore"  # Ignora variables de entorno adicionales
     }
 
+class SFTPConfig(BaseSettings):
+    host: str
+    port: int
+    username: str
+    password: str
+
+    model_config = {
+        "env_prefix": "SFTP_",
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+        "extra": "ignore"
+    }
+
 
 def get_config() -> AppConfig:
     """
@@ -85,6 +97,9 @@ def get_bigquery_config() -> BigQueryConfig:
     """
     return BigQueryConfig()
 
+
+def get_sftp_config() -> SFTPConfig:
+    return SFTPConfig()
 
 # Instancia global de configuración (solo se crea cuando se necesita)
 config: Optional[AppConfig] = None

@@ -7,42 +7,56 @@ from pydantic import BaseModel, Field, field_validator, model_validator, ConfigD
 
 
 class DataRecord(BaseModel):
-    """
-    Modelo base para registros de datos.
-    Personaliza este modelo según tus necesidades específicas.
-    """
-    
-    id: int = Field(..., description="Identificador único del registro")
-    name: str = Field(..., min_length=1, max_length=255, description="Nombre del registro")
-    value: Optional[float] = Field(None, description="Valor numérico opcional")
-    category: Optional[str] = Field(None, max_length=100, description="Categoría del registro")
-    is_active: bool = Field(True, description="Indica si el registro está activo")
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Fecha de creación")
-    updated_at: Optional[datetime] = Field(None, description="Fecha de última actualización")
-    metadata: Optional[Dict[str, Any]] = Field(None, description="Metadatos adicionales en formato JSON")
-    
-    @field_validator('name')
+    cola: str = Field(..., min_length=1, max_length=4, description="Código de cola")
+    cola_id_cyber: str = Field(..., min_length=1, max_length=4, description="ID Cyber de cola")
+    rut: str = Field(..., min_length=1, max_length=8, description="RUT")
+    dv: str = Field(..., min_length=1, max_length=1, description="Dígito verificador")
+    nombre: str = Field(..., min_length=1, max_length=80, description="Nombre")
+    ap_paterno: str = Field(..., min_length=1, max_length=80, description="Apellido paterno")
+    ap_materno: str = Field(..., min_length=1, max_length=4, description="Apellido materno")
+    cod_fono_part: str = Field(..., max_length=5, description="Código fono particular")
+    fono_part: str = Field(..., max_length=15, description="Fono particular")
+    cod_fono_part_cel: str = Field(..., max_length=5, description="Código fono particular celular")
+    fono_part_cel: str = Field(..., max_length=15, description="Fono particular celular")
+    cod_fono_cel: str = Field(..., max_length=5, description="Código fono celular")
+    fono_cel: str = Field(..., max_length=15, description="Fono celular")
+    cod_fono_ref: str = Field(..., max_length=5, description="Código fono referencia")
+    fono_ref: str = Field(..., max_length=15, description="Fono referencia")
+    dias_mora: str = Field(..., max_length=5, description="Días de mora")
+    apagar_mes: str = Field(..., max_length=15, description="Monto a pagar mes")
+    pie_pm_op1: str = Field(..., description="Pie PM OP1")
+    fecha_proceso: str = Field(..., description="Fecha de proceso")
+    fecha_mora1: str = Field(..., description="Fecha de mora 1")
+    monto_mora1: str = Field(..., description="Monto de mora 1")
+    mail: str = Field(..., description="Correo electrónico")
+    tarjeta: str = Field(..., description="Número de tarjeta")
+    fec_venc: str = Field(..., description="Fecha de vencimiento")
+
+    def is_valid(self) -> bool:
+        return bool(self.cola and self.rut and self.nombre)
+
+    @field_validator('nombre')
     @classmethod
-    def name_must_not_be_empty(cls, v):
+    def nombre_must_not_be_empty(cls, v):
         """Valida que el nombre no esté vacío."""
         if not v or not v.strip():
             raise ValueError('El nombre no puede estar vacío')
         return v.strip()
     
-    @field_validator('value')
-    @classmethod
-    def value_must_be_positive_if_present(cls, v):
-        """Valida que el valor sea positivo si está presente."""
-        if v is not None and v < 0:
-            raise ValueError('El valor debe ser positivo')
-        return v
+   # @field_validator('value')
+   # @classmethod
+   # def value_must_be_positive_if_present(cls, v):
+    #    """Valida que el valor sea positivo si está presente."""
+    #    if v is not None and v < 0:
+    #        raise ValueError('El valor debe ser positivo')
+    #   return v
     
-    @model_validator(mode='after')
-    def validate_updated_at_after_created_at(self):
-        """Valida que updated_at sea posterior a created_at."""
-        if self.updated_at and self.created_at and self.updated_at < self.created_at:
-            raise ValueError('La fecha de actualización debe ser posterior a la fecha de creación')
-        return self
+    #@model_validator(mode='after')
+    #def validate_updated_at_after_created_at(self):
+    #    """Valida que updated_at sea posterior a created_at."""
+    #    if self.updated_at and self.created_at and self.updated_at < self.created_at:
+    #        raise ValueError('La fecha de actualización debe ser posterior a la fecha de creación')
+    #    return self
     
     def is_valid(self) -> bool:
         """
