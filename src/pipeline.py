@@ -1,28 +1,31 @@
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone
+from uuid import uuid4
 
-from src.models.registro_txt_full import RegistroTxtFull
-
-from .config import init_config, get_bigquery_config, get_sftp_config
+from .config import get_sftp_config
 from .services.sftp_service import SFTPService
-from .services.bigquery_service import BigQueryService
 from .models.data_models import DataRecord
+from src.models.log_records import LogRecord
+from src.services.firestore_service import FirestoreService 
 from .utils.logger import get_logger
 
 logger = get_logger(__name__)
-
 class Pipeline:
     """
     Pipeline principal para procesamiento ETL usando SFTP como fuente.
     """
     def __init__(self):
         self.sftp_service = SFTPService(get_sftp_config())
-        self.bigquery_service = BigQueryService()
+        self.firestore_service = FirestoreService()
         self.start_time: Optional[datetime] = None
         self.end_time: Optional[datetime] = None
 
     async def run(self) -> bool:
         self.start_time = datetime.now(timezone.utc)
+        carga_id = str(uuid4())
+        errores: list = []
+        archivo_url = "/upload/Cyber/preventivaZENTA.txt"
+        estado = "OK"
         logger.info("Iniciando ejecución del pipeline")
 
         try:
@@ -42,7 +45,7 @@ class Pipeline:
 
             # Paso 3: Load
             logger.info("Iniciando carga de datos")
-            success = await self.load(transformed_data)
+            success = await self.load(transformed_data, carga_id)
 
             if success:
                 logger.info("Pipeline completado exitosamente")
@@ -58,6 +61,18 @@ class Pipeline:
             self.end_time = datetime.now(timezone.utc)
             duration = (self.end_time - self.start_time).total_seconds()
             logger.info(f"Pipeline finalizado. Duración: {duration:.2f} segundos")
+
+            # Guardar log en Firestore
+            log = LogRecord(
+                carga_id=carga_id,
+                fecha_inicio=self.start_time,
+                fecha_fin=self.end_time,
+                archivo_url=archivo_url,
+                errores=errores,
+                estado=estado
+            )
+            self.firestore_service.connect()
+            self.firestore_service.save_log_record(log)
 
     def extract(self) -> List[Dict[str, Any]]:
         """
@@ -94,37 +109,21 @@ class Pipeline:
         print(transformed_data[0].model_dump(mode='json'))  # Depuración: muestra el segundo registro transformado
         return transformed_data
 
-    async def load(self, data: List[DataRecord]) -> bool:
+    async def load(self, data: List[DataRecord], carga_id: str = None) -> bool:
         """
-        Carga los datos transformados al destino.
-        
-        Args:
-            data: Datos transformados para cargar
-            
-        Returns:
-            bool: True si la carga fue exitosa
+        Carga los datos transformados en Firestore.
         """
         try:
-            app_config = init_config()
-            batch_size = app_config.batch_size
-            total_batches = (len(data) + batch_size - 1) // batch_size
-
-            for i in range(0, len(data), batch_size):
-                batch = data[i:i + batch_size]
-                batch_num = (i // batch_size) + 1
-
-                logger.info(f"Procesando lote {batch_num}/{total_batches} ({len(batch)} registros)")
-                batch_dicts = [record.model_dump(mode='json') for record in batch]
-                success = await self.bigquery_service.load(batch_dicts)
-                if not success:
-                    logger.error(f"Error cargando lote {batch_num}")
-                    return False
-
-            logger.info("Todos los lotes cargados exitosamente")
+            if not carga_id:
+                carga_id = str(uuid4())
+            # Convierte DataRecord a dict antes de guardar
+            records_dicts = [record.model_dump(mode='json') for record in data]
+            self.firestore_service.connect()
+            self.firestore_service.save_transformed_records(records_dicts, carga_id)
+            logger.info("Todos los registros guardados en Firestore exitosamente")
             return True
-
         except Exception as e:
-            logger.exception(f"Error en la carga: {e}")
+            logger.exception(f"Error en la carga a Firestore: {e}")
             return False
 
     async def validate_data_quality(self, data: List[DataRecord]) -> bool:

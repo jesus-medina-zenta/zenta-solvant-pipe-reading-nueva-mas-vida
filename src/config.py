@@ -75,6 +75,18 @@ class SFTPConfig(BaseSettings):
         "extra": "ignore"
     }
 
+class FirestoreConfig(BaseSettings):
+    project_id: str
+    collection: str
+    database: str = ""
+    logs_collection: str = "logs" 
+
+    model_config = {
+        "env_prefix": "FIRESTORE_",
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+        "extra": "ignore"
+    }
 
 def get_config() -> AppConfig:
     """
@@ -100,6 +112,10 @@ def get_bigquery_config() -> BigQueryConfig:
 
 def get_sftp_config() -> SFTPConfig:
     return SFTPConfig()
+
+
+def get_firestore_config() -> FirestoreConfig:
+    return FirestoreConfig()
 
 # Instancia global de configuración (solo se crea cuando se necesita)
 config: Optional[AppConfig] = None
