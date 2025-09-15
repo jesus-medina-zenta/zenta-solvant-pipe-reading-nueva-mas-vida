@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -10,6 +10,7 @@ from src.services.firestore_service import FirestoreService
 from .utils.logger import get_logger
 
 logger = get_logger(__name__)
+
 class Pipeline:
     """
     Pipeline principal para procesamiento ETL usando SFTP como fuente.
@@ -22,10 +23,11 @@ class Pipeline:
 
     async def run(self) -> bool:
         self.start_time = datetime.now(timezone.utc)
-        carga_id = str(uuid4())
-        errores: list = []
-        archivo_url = "/upload/Cyber/preventivaZENTA.txt"
-        estado = "OK"
+        id = str(uuid4())
+        start_date: list = []
+        file_url = "/upload/Cyber/preventivaZENTA.txt"
+        status = "OK"
+        error_list = [] 
         logger.info("Iniciando ejecución del pipeline")
 
         try:
@@ -36,40 +38,59 @@ class Pipeline:
 
             if not raw_data:
                 logger.warning("No se encontraron datos para procesar")
+                status = "NO_DATA"
+                error_list.append("No se encontraron datos para procesar")
                 return True
 
             # Paso 2: Transform
             logger.info("Iniciando transformación de datos")
-            transformed_data = await self.transform(raw_data)
+            transformed_data, transform_errors = await self.transform(raw_data)
+            error_list.extend(transform_errors)  # Agregar errores específicos de transformación
             logger.info(f"Transformados {len(transformed_data)} registros")
+
+            if not transformed_data and raw_data:
+                logger.error("No se pudo transformar ningún registro")
+                status = "TRANSFORM_ERROR"
+                return False
 
             # Paso 3: Load
             logger.info("Iniciando carga de datos")
-            success = await self.load(transformed_data, carga_id)
+            success, load_errors = await self.load(transformed_data, id)
+            error_list.extend(load_errors)  # Agregar errores de carga
 
             if success:
                 logger.info("Pipeline completado exitosamente")
+                status = "SUCCESS" if not error_list else "SUCCESS_WITH_ERRORS"
                 return True
             else:
                 logger.error("Error en la carga de datos")
+                status = "LOAD_ERROR"
                 return False
 
         except Exception as e:
             logger.exception(f"Error en el pipeline: {e}")
+            status = "ERROR"
+            error_list.append(f"Error general del pipeline: {str(e)}")
             return False
         finally:
             self.end_time = datetime.now(timezone.utc)
             duration = (self.end_time - self.start_time).total_seconds()
             logger.info(f"Pipeline finalizado. Duración: {duration:.2f} segundos")
 
+            # Log summary de errores
+            if error_list:
+                logger.warning(f"Pipeline completado con {len(error_list)} errores:")
+                for i, error in enumerate(error_list, 1):
+                    logger.warning(f"  {i}. {error}")
+
             # Guardar log en Firestore
             log = LogRecord(
-                carga_id=carga_id,
-                fecha_inicio=self.start_time,
-                fecha_fin=self.end_time,
-                archivo_url=archivo_url,
-                errores=errores,
-                estado=estado
+                id=id,
+                start_date=self.start_time,
+                end_date=self.end_time,
+                file_url=file_url,
+                errors=error_list, 
+                status=status
             )
             self.firestore_service.connect()
             self.firestore_service.save_log_record(log)
@@ -81,62 +102,104 @@ class Pipeline:
         try:
             remote_path = "/upload/Cyber/preventivaZENTA.txt"
             data = self.sftp_service.extract(remote_path)
-           # print("Datos extraídos:", data)  # Depuración
             return data
         except Exception as e:
             logger.error(f"Error en la extracción SFTP: {e}")
             return []
 
-#CAMBIAR RETURN TYPE A List[DataRecord]
-    async def transform(self, raw_data: List[Dict[str, Any]]) -> List[DataRecord]:
+    async def transform(self, raw_data: List[Dict[str, Any]]) -> Tuple[List[DataRecord], List[str]]:
+        """
+        Transforma los datos raw en DataRecord objects.
+        
+        Returns:
+            Tuple[List[DataRecord], List[str]]: (datos_transformados, lista_de_errores)
+        """
         transformed_data = []
-        errors = 0
+        error_messages = []
 
-        for row in raw_data:
+        for i, row in enumerate(raw_data):
             try:
                 record = DataRecord(**row)
                 transformed_data.append(record)
             except Exception as e:
-                errors += 1
-                logger.warning(f"Error transformando registro: {e}")
-                if errors == len(raw_data) and len(raw_data) > 0:
-                    logger.error(f"Todos los registros son inválidos ({errors} errores)")
-                    return []
+                error_msg = f"Registro {i+1}: {str(e)} - Datos: {row}"
+                error_messages.append(error_msg)
+                logger.warning(f"Error transformando registro {i+1}: {e}")
 
-        if errors > 0:
-            logger.warning(f"Se encontraron {errors} errores en la transformación")
+        # Log resumen de transformación
+        if error_messages:
+            logger.warning(f"Transformación completada con {len(error_messages)} errores de {len(raw_data)} registros")
+            
+            # Si todos los registros fallaron
+            if len(error_messages) == len(raw_data) and len(raw_data) > 0:
+                logger.error("Todos los registros fallaron en la transformación")
+        else:
+            logger.info("Transformación completada sin errores")
 
-        print(transformed_data[0].model_dump(mode='json'))  # Depuración: muestra el segundo registro transformado
-        return transformed_data
+        if transformed_data:
+            logger.info(f"Ejemplo de registro transformado: {transformed_data[0].model_dump(mode='json')}")
+        
+        return transformed_data, error_messages
 
-    async def load(self, data: List[DataRecord], carga_id: str = None) -> bool:
+    async def load(self, data: List[DataRecord], id: str = None) -> Tuple[bool, List[str]]:
         """
         Carga los datos transformados en Firestore.
+        
+        Returns:
+            Tuple[bool, List[str]]: (success, lista_de_errores)
         """
+        error_messages = []
+        
         try:
-            if not carga_id:
-                carga_id = str(uuid4())
+            if not data:
+                error_msg = "No hay datos para cargar"
+                error_messages.append(error_msg)
+                logger.warning(error_msg)
+                return False, error_messages
+
+            if not id:
+                id = str(uuid4())
+            
             # Convierte DataRecord a dict antes de guardar
             records_dicts = [record.model_dump(mode='json') for record in data]
             self.firestore_service.connect()
-            self.firestore_service.save_transformed_records(records_dicts, carga_id)
-            logger.info("Todos los registros guardados en Firestore exitosamente")
-            return True
+            self.firestore_service.save_transformed_records(records_dicts, id)
+            logger.info(f"Todos los {len(records_dicts)} registros guardados en Firestore exitosamente")
+            return True, error_messages
+            
         except Exception as e:
-            logger.exception(f"Error en la carga a Firestore: {e}")
-            return False
+            error_msg = f"Error en la carga a Firestore: {str(e)}"
+            error_messages.append(error_msg)
+            logger.exception(error_msg)
+            return False, error_messages
 
-    async def validate_data_quality(self, data: List[DataRecord]) -> bool:
+    async def validate_data_quality(self, data: List[DataRecord]) -> Tuple[bool, List[str]]:
+        """
+        Valida la calidad de los datos.
+        
+        Returns:
+            Tuple[bool, List[str]]: (es_valido, lista_de_errores)
+        """
+        error_messages = []
+        
         if not data:
-            logger.warning("No hay datos para validar")
-            return False
+            error_msg = "No hay datos para validar"
+            error_messages.append(error_msg)
+            logger.warning(error_msg)
+            return False, error_messages
 
-        null_count = sum(1 for record in data if not record.is_valid())
-        null_percentage = (null_count / len(data)) * 100
+        invalid_records = []
+        for i, record in enumerate(data):
+            if not record.is_valid():
+                invalid_records.append(i + 1)
+
+        null_percentage = (len(invalid_records) / len(data)) * 100
 
         if null_percentage > 5:
-            logger.error(f"Demasiados registros inválidos: {null_percentage:.2f}%")
-            return False
+            error_msg = f"Calidad de datos insuficiente: {null_percentage:.2f}% registros inválidos. Registros inválidos: {invalid_records[:10]}{'...' if len(invalid_records) > 10 else ''}"
+            error_messages.append(error_msg)
+            logger.error(error_msg)
+            return False, error_messages
 
         logger.info(f"Validación de calidad pasada. Registros inválidos: {null_percentage:.2f}%")
-        return True
+        return True, error_messages

@@ -51,18 +51,18 @@ class FirestoreService:
             self.is_connected = False
             logger.info("Conexión a Firestore cerrada")
 
-    def save_transformed_records(self, records: list, carga_id: str):
+    def save_transformed_records(self, records: list, id: str):
         collection_ref = self.client.collection(self.collection)
         for idx, record in enumerate(records):
             if isinstance(record, DataRecord):
                 record_dict = record.model_dump(mode="json")
             else:
                 record_dict = record
-            doc_id = f"{carga_id}_{idx+1}"
+            doc_id = f"{id}_{idx+1}"
             collection_ref.document(doc_id).set(record_dict)
         logger.info(f"{len(records)} registros guardados en la colección '{self.collection}'")
 
     def save_log_record(self, log: LogRecord):
-        doc_ref = self.client.collection(self.logs_collection).document(log.carga_id)
+        doc_ref = self.client.collection(self.logs_collection).document(log.id)
         doc_ref.set(log.model_dump(mode="json"))
-        logger.info(f"Log guardado con id {log.carga_id}")
+        logger.info(f"Log guardado con id {log.id}")

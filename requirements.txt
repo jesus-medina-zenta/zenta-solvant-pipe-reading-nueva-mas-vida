@@ -1,11 +1,19 @@
+# Core dependencies
 numpy<2
-paramiko==3.3.1
-google-cloud-bigquery==3.13.0
+pandas
 pydantic==2.11.5
 pydantic-settings==2.9.1
 python-dotenv==1.0.0
-pandas
+
+# SFTP connection
+paramiko==3.3.1
+
+# Google Cloud Firestore
+google-cloud-firestore
+
+# File processing
 pyarrow==14.0.2
 openpyxl==3.1.2
-# asyncpg==0.29.0  # Solo si usas Postgres
-# pytest           # Solo si agregas tests
+
+# Async support
+asyncio
