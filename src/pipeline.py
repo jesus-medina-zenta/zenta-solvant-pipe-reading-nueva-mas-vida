@@ -1,6 +1,7 @@
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timezone
 from uuid import uuid4
+import os
 
 from .config import get_sftp_config
 from .services.sftp_service import SFTPService
@@ -20,6 +21,7 @@ class Pipeline:
         self.firestore_service = FirestoreService()
         self.start_time: Optional[datetime] = None
         self.end_time: Optional[datetime] = None
+        self.file_url = os.getenv("PIPELINE_FILE_URL")
 
     async def run(self) -> bool:
         self.start_time = datetime.now(timezone.utc)
@@ -88,7 +90,7 @@ class Pipeline:
                 id=id,
                 start_date=self.start_time,
                 end_date=self.end_time,
-                file_url=file_url,
+                file_url=self.file_url,
                 errors=error_list, 
                 status=status
             )
@@ -100,7 +102,7 @@ class Pipeline:
         Extrae datos desde el archivo TXT en SFTP.
         """
         try:
-            remote_path = "/upload/Cyber/preventivaZENTA.txt"
+            remote_path = self.file_url
             data = self.sftp_service.extract(remote_path)
             return data
         except Exception as e:
