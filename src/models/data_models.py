@@ -13,7 +13,7 @@ class DataRecord(BaseModel):
     fecha: datetime = Field(..., description="Fecha y hora de inicio")
     id: str = Field(..., description="ID de la carga")
     phone_number: str = Field(..., max_length=15, description="Teléfono principal")
-    phone_number_2: str = Field(..., max_length=15, description="Teléfono secundario")
+    phone_number_2: Optional[str] = Field("", max_length=15, description="Teléfono secundario")
     metadata_user: MetadataUser = Field(..., description="Datos del usuario agrupados")
 
     @classmethod
@@ -87,28 +87,39 @@ class DataRecord(BaseModel):
             expiration_date=data.get('expiration_date', '').strip(),
         )
 
-        # Extraer fecha e ID de carga (format: "16092025-uuid")
+        # Extraer ID de carga
         if '-' in carga_id:
-            id_parte = carga_id.split('-', 1)[1]  # Todo después del primer guión
+            id_parte = carga_id.split('-', 1)[1]
         else:
             id_parte = carga_id
+        
         # Extraer y limpiar números de teléfono
         personal_phone = data.get('personal_phone', '').strip()
         cell_phone = data.get('cell_phone', '').strip()
         
-        # Formatear teléfonos
+        # ✅ LÓGICA DE INTERCAMBIO DE TELÉFONOS
         phone_1 = f"+56{personal_phone}" if personal_phone else ""
         phone_2 = f"+56{cell_phone}" if cell_phone else ""
-
-        #validar phone's
+        
+        # Si phone_1 está vacío, intentar usar phone_2
         if not phone_1 or phone_1 == "+56":
-            raise ValueError("El teléfono principal es obligatorio y no puede ser solo el código de país.")
+            if phone_2 and phone_2 != "+56":
+                # Intercambiar: phone_2 se convierte en phone_1
+                phone_1 = phone_2
+                phone_2 = ""  # phone_2 queda vacío después del intercambio
+            else:
+                # Ambos están vacíos
+                raise ValueError("No se encontró ningún número de teléfono válido en el registro")
+        
+        # Si phone_2 está vacío o es solo "+56", convertir a string vacío
+        if not phone_2 or phone_2 == "+56":
+            phone_2 = ""
         
         return cls(
             fecha=fecha_utc,
             id=id_parte,
-            phone_number=phone_1[:15],  # Truncar a 15 caracteres
-            phone_number_2=phone_2[:15],  # Truncar a 15 caracteres
+            phone_number=phone_1[:15],  # Siempre tendrá un valor válido
+            phone_number_2=phone_2[:15] if phone_2 else "",  # Puede estar vacío
             metadata_user=metadata
         )
 
