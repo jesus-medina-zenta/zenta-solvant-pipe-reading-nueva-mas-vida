@@ -5,62 +5,138 @@ from datetime import datetime, timezone
 from typing import Optional, Any, Dict
 from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 
+from src.models.metadata_user import MetadataUser
+
+
 
 class DataRecord(BaseModel):
-    queue: str = Field(..., min_length=1, max_length=4, description="Queue code")
-    queue_id_cyber: str = Field(..., min_length=1, max_length=4, description="Cyber queue ID")
-    rut: str = Field(..., min_length=1, max_length=9, description="RUT with verification digit")
-    name: str = Field(..., min_length=1, max_length=80, description="Name")
-    paternal_surname: str = Field(..., min_length=1, max_length=80, description="Paternal surname")
-    maternal_surname: str = Field(..., min_length=1, max_length=4, description="Maternal surname")
-    personal_area_code: str = Field(..., max_length=5, description="Personal phone area code")
-    personal_phone: str = Field(..., max_length=15, description="Personal phone")
-    personal_cell_area_code: str = Field(..., max_length=5, description="Personal cell phone area code")
-    personal_cell_phone: str = Field(..., max_length=15, description="Personal cell phone")
-    cell_area_code: str = Field(..., max_length=5, description="Cell phone area code")
-    cell_phone: str = Field(..., max_length=15, description="Cell phone")
-    reference_area_code: str = Field(..., max_length=5, description="Reference phone area code")
-    reference_phone: str = Field(..., max_length=15, description="Reference phone")
-    days_overdue: str = Field(..., max_length=5, description="Days overdue")
-    monthly_payment: str = Field(..., max_length=15, description="Monthly payment amount")
-    down_payment_option1: str = Field(..., description="Down payment option 1")
-    process_date: str = Field(..., description="Process date")
-    overdue_date1: str = Field(..., description="Overdue date 1")
-    overdue_amount1: str = Field(..., description="Overdue amount 1")
-    email: str = Field(..., description="Email address")
-    card: str = Field(..., description="Card number")
-    expiration_date: str = Field(..., description="Expiration date")
+    fecha: datetime = Field(..., description="Fecha y hora de inicio")
+    id: str = Field(..., description="ID de la carga")
+    phone_number: str = Field(..., max_length=15, description="Teléfono principal")
+    phone_number_2: str = Field(..., max_length=15, description="Teléfono secundario")
+    metadata_user: MetadataUser = Field(..., description="Datos del usuario agrupados")
 
-    @field_validator('name')
     @classmethod
-    def name_must_not_be_empty(cls, v):
-        """Validates that the name is not empty."""
-        if not v or not v.strip():
-            raise ValueError('Name cannot be empty')
-        return v.strip()
-    
-   # @field_validator('value')
-   # @classmethod
-   # def value_must_be_positive_if_present(cls, v):
-    #    """Validates that the value is positive if present."""
-    #    if v is not None and v < 0:
-    #        raise ValueError('Value must be positive')
-    #   return v
-    
-    #@model_validator(mode='after')
-    #def validate_updated_at_after_created_at(self):
-    #    """Validates that updated_at is after created_at."""
-    #    if self.updated_at and self.created_at and self.updated_at < self.created_at:
-    #        raise ValueError('Update date must be after creation date')
-    #    return self
-    
-    def is_valid(self) -> bool:
-        """Validates that critical fields are present."""
-        return bool(
-            self.queue and self.queue.strip() and
-            self.rut and self.rut.strip() and
-            self.name and self.name.strip()
+    def from_line(cls, line: str, carga_id: str) -> "DataRecord":
+        """Crea un DataRecord desde una línea del archivo TXT"""
+        metadata = MetadataUser(
+            queue=line[0:4].strip(),
+            queue_id_cyber=line[0:4].strip(),
+            rut=line[4:12].strip() + line[12:13].strip(),
+            name=line[48:128].strip(),
+            paternal_surname=line[128:208].strip(),
+            maternal_surname=line[208:212].strip(),
+            days_overdue=line[473:478].strip(),
+            monthly_payment=line[478:493].strip(),
+            down_payment_option1=line[508:523].strip(),
+            process_date=line[572:582].strip(),
+            overdue_date1=line[586:596].strip(),
+            overdue_amount1=line[596:611].strip(),
+            email=line[822:882].strip(),
+            card=line[902:908].strip(),
+            expiration_date=line[1008:1018].strip(),
         )
+        return cls(
+            id=carga_id,
+            phone_number=f"+56{line[377:392].strip()}",
+            phone_number_2=f"+56{line[397:412].strip()}",
+            metadata_user=metadata
+        )
+    
+    @field_validator('phone_number')
+    @classmethod
+    def validate_phone_number(cls, v):
+        """Valida que el teléfono principal no esté vacío"""
+        if not v or v.strip() == "" or v.strip() == "+56":
+            raise ValueError('phone_number es requerido y no puede estar vacío')
+        return v.strip()
+
+    @field_validator('phone_number_2')
+    @classmethod
+    def validate_phone_number_2(cls, v):
+        """Valida el teléfono secundario (opcional)"""
+        if v is not None and (v.strip() == "" or v.strip() == "+56"):
+            return None  # Convertir string vacío a None
+        return v.strip() if v else None
+
+    @model_validator(mode='after')
+    def validate_at_least_one_phone(self):
+        """Valida que al menos phone_number tenga un valor válido"""
+        if not self.phone_number or self.phone_number.strip() == "" or self.phone_number.strip() == "+56":
+            raise ValueError('Debe tener al menos un número de teléfono válido (phone_number)')
+        return self
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any], carga_id: str, fecha_utc) -> "DataRecord":
+        """Crea un DataRecord desde un diccionario de datos"""
+        metadata = MetadataUser(
+            queue=data.get('queue', '').strip(),
+            queue_id_cyber=data.get('queue_id_cyber', '').strip(),
+            rut=data.get('rut', '').strip(),
+            name=data.get('name', '').strip(),
+            paternal_surname=data.get('paternal_surname', '').strip(),
+            maternal_surname=data.get('maternal_surname', '').strip(),
+            days_overdue=data.get('days_overdue', '').strip(),
+            monthly_payment=data.get('monthly_payment', '').strip(),
+            down_payment_option1=data.get('down_payment_option1', '').strip(),
+            process_date=data.get('process_date', '').strip(),
+            overdue_date1=data.get('overdue_date1', '').strip(),
+            overdue_amount1=data.get('overdue_amount1', '').strip(),
+            email=data.get('email', '').strip(),
+            card=data.get('card', '').strip(),
+            expiration_date=data.get('expiration_date', '').strip(),
+        )
+
+        # Extraer fecha e ID de carga (format: "16092025-uuid")
+        if '-' in carga_id:
+            id_parte = carga_id.split('-', 1)[1]  # Todo después del primer guión
+        else:
+            id_parte = carga_id
+        # Extraer y limpiar números de teléfono
+        personal_phone = data.get('personal_phone', '').strip()
+        cell_phone = data.get('cell_phone', '').strip()
+        
+        # Formatear teléfonos
+        phone_1 = f"+56{personal_phone}" if personal_phone else ""
+        phone_2 = f"+56{cell_phone}" if cell_phone else ""
+
+        #validar phone's
+        if not phone_1 or phone_1 == "+56":
+            raise ValueError("El teléfono principal es obligatorio y no puede ser solo el código de país.")
+        
+        return cls(
+            fecha=fecha_utc,
+            id=id_parte,
+            phone_number=phone_1[:15],  # Truncar a 15 caracteres
+            phone_number_2=phone_2[:15],  # Truncar a 15 caracteres
+            metadata_user=metadata
+        )
+
+    def is_valid(self) -> bool:
+        """Validates that critical fields are present, including phone_number."""
+        return bool(
+            self.phone_number and self.phone_number.strip() and self.phone_number != "+56" and
+            self.metadata_user.queue and self.metadata_user.queue.strip() and
+            self.metadata_user.rut and self.metadata_user.rut.strip() and
+            self.metadata_user.name and self.metadata_user.name.strip()
+        )
+    
+    model_config = ConfigDict(
+        validate_assignment=True,
+        use_enum_values=True,
+        json_schema_extra={
+            "example": {
+                "id": "16092025-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+                "phone_number": "+56912345678",
+                "phone_number_2": "+56987654321",
+                "metadata_user": {
+                    "queue": "PRA3",
+                    "rut": "12345678-9",
+                    "name": "Juan Pérez"
+                }
+            }
+        }
+    )
     
     model_config = ConfigDict(
         validate_assignment=True,

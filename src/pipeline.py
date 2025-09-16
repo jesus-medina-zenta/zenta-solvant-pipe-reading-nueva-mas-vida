@@ -3,6 +3,8 @@ from datetime import datetime, timezone
 from uuid import uuid4
 import os
 
+from src.models.registro_txt import RegistroTxt
+
 from .config import get_sftp_config
 from .services.sftp_service import SFTPService
 from .models.data_models import DataRecord
@@ -25,7 +27,9 @@ class Pipeline:
 
     async def run(self) -> bool:
         self.start_time = datetime.now(timezone.utc)
-        id = str(uuid4())
+        fecha = datetime.now().strftime("%d%m%Y")
+        fecha_utc = datetime.now(timezone.utc)
+        id = f"{fecha}-{uuid4()}"
         start_date: list = []
         file_url = "/upload/Cyber/preventivaZENTA.txt"
         status = "OK"
@@ -46,7 +50,7 @@ class Pipeline:
 
             # Paso 2: Transform
             logger.info("Iniciando transformación de datos")
-            transformed_data, transform_errors = await self.transform(raw_data)
+            transformed_data, transform_errors = await self.transform(raw_data, id, fecha_utc)
             error_list.extend(transform_errors)  # Agregar errores específicos de transformación
             logger.info(f"Transformados {len(transformed_data)} registros")
 
@@ -79,6 +83,11 @@ class Pipeline:
             duration = (self.end_time - self.start_time).total_seconds()
             logger.info(f"Pipeline finalizado. Duración: {duration:.2f} segundos")
 
+            max_errores = 50
+            truncated_errors = error_list[:max_errores]
+            if len(error_list) > max_errores:
+                truncated_errors.append(f"...y {len(error_list) - max_errores} errores más.")
+
             # Log summary de errores
             if error_list:
                 logger.warning(f"Pipeline completado con {len(error_list)} errores:")
@@ -86,16 +95,31 @@ class Pipeline:
                     logger.warning(f"  {i}. {error}")
 
             # Guardar log en Firestore
-            log = LogRecord(
-                id=id,
-                start_date=self.start_time,
-                end_date=self.end_time,
-                file_url=self.file_url,
-                errors=error_list, 
-                status=status
-            )
-            self.firestore_service.connect()
-            self.firestore_service.save_log_record(log)
+            try: 
+                log = LogRecord(
+                    id=id,
+                    start_date=self.start_time,
+                    end_date=self.end_time,
+                    file_url=self.file_url,
+                    errors=truncated_errors, 
+                    status=status
+                )
+                self.firestore_service.connect()
+                self.firestore_service.save_log_record(log)
+            except Exception as e:
+                logger.exception(f"Error guardando log en Firestore: {e}")
+                try:
+                    minimal_log = LogRecord(
+                        id= id,
+                        start_date=self.start_time,
+                        end_date=self.end_time,
+                        file_url=self.file_url or "N/A",
+                        errors=[f"Pipeline completado con {len(error_list)} errores (log truncado por tamaño)"],
+                        status=status
+                    )
+                    self.firestore_service.save_log_record(minimal_log)
+                except Exception as e2:
+                    logger.exception(f"Error guardando log en Firestore: {e2}")
 
     def extract(self) -> List[Dict[str, Any]]:
         """
@@ -109,10 +133,10 @@ class Pipeline:
             logger.error(f"Error en la extracción SFTP: {e}")
             return []
 
-    async def transform(self, raw_data: List[Dict[str, Any]]) -> Tuple[List[DataRecord], List[str]]:
+    async def transform(self, raw_data: List[Dict[str, Any]], id: str, fecha_utc) -> Tuple[List[DataRecord], List[str]]:
         """
-        Transforma los datos raw en DataRecord objects.
-        
+        Transforma los datos raw en objetos DataRecord.
+
         Returns:
             Tuple[List[DataRecord], List[str]]: (datos_transformados, lista_de_errores)
         """
@@ -121,7 +145,7 @@ class Pipeline:
 
         for i, row in enumerate(raw_data):
             try:
-                record = DataRecord(**row)
+                record = DataRecord.from_dict(row, id, fecha_utc)
                 transformed_data.append(record)
             except Exception as e:
                 error_msg = f"Registro {i+1}: {str(e)} - Datos: {row}"
@@ -137,9 +161,6 @@ class Pipeline:
                 logger.error("Todos los registros fallaron en la transformación")
         else:
             logger.info("Transformación completada sin errores")
-
-        if transformed_data:
-            logger.info(f"Ejemplo de registro transformado: {transformed_data[0].model_dump(mode='json')}")
         
         return transformed_data, error_messages
 
