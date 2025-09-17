@@ -30,7 +30,7 @@ class Pipeline:
         fecha_utc = datetime.now(timezone.utc)
         id = f"{fecha}-{uuid4()}"
         start_date: list = []
-        file_url = "/upload/Cyber/preventivaZENTA.txt"
+        file_url = self.file_url
         status = "OK"
         error_list = [] 
         logger.info("Iniciando ejecución del pipeline")
