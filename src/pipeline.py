@@ -3,7 +3,6 @@ from datetime import datetime, timezone
 from uuid import uuid4
 import os
 
-from src.models.registro_txt import RegistroTxt
 
 from .config import get_sftp_config
 from .services.sftp_service import SFTPService

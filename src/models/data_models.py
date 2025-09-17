@@ -3,11 +3,12 @@ Data models using Pydantic for validation.
 """
 from datetime import datetime, timezone
 from typing import Optional, Any, Dict
+from ..utils.logger import get_logger
 from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 
 from src.models.metadata_user import MetadataUser
 
-
+logger = get_logger(__name__)
 
 class DataRecord(BaseModel):
     fecha: datetime = Field(..., description="Fecha y hora de inicio")
@@ -17,31 +18,101 @@ class DataRecord(BaseModel):
     metadata_user: MetadataUser = Field(..., description="Datos del usuario agrupados")
 
     @classmethod
-    def from_line(cls, line: str, carga_id: str) -> "DataRecord":
-        """Crea un DataRecord desde una línea del archivo TXT"""
-        metadata = MetadataUser(
-            queue=line[0:4].strip(),
-            queue_id_cyber=line[0:4].strip(),
-            rut=line[4:12].strip() + line[12:13].strip(),
-            name=line[48:128].strip(),
-            paternal_surname=line[128:208].strip(),
-            maternal_surname=line[208:212].strip(),
-            days_overdue=line[473:478].strip(),
-            monthly_payment=line[478:493].strip(),
-            down_payment_option1=line[508:523].strip(),
-            process_date=line[572:582].strip(),
-            overdue_date1=line[586:596].strip(),
-            overdue_amount1=line[596:611].strip(),
-            email=line[822:882].strip(),
-            card=line[902:908].strip(),
-            expiration_date=line[1008:1018].strip(),
-        )
-        return cls(
-            id=carga_id,
-            phone_number=f"+56{line[377:392].strip()}",
-            phone_number_2=f"+56{line[397:412].strip()}",
-            metadata_user=metadata
-        )
+    def from_line(cls, line: str, carga_id: str, fecha_utc: str) -> "DataRecord":
+        """Crea un DataRecord desde una línea del archivo TXT con manejo detallado de errores"""
+        try:
+            logger.debug(f"Procesando línea de {len(line)} caracteres para carga_id: {carga_id}")
+            
+            # Extraer campos de metadata con manejo de excepciones individual
+            metadata_fields = {}
+            field_mappings = [
+                ('queue', 0, 4),
+                ('queue_id_cyber', 0, 4),
+                ('rut_number', 4, 12),
+                ('rut_digit', 12, 13),
+                ('name', 48, 128),
+                ('paternal_surname', 128, 208),
+                ('maternal_surname', 208, 212),
+                ('days_overdue', 473, 478),
+                ('monthly_payment', 478, 493),
+                ('down_payment_option1', 508, 523),
+                ('process_date', 572, 582),
+                ('overdue_date1', 586, 596),
+                ('overdue_amount1', 596, 611),
+                ('email', 822, 882),
+                ('card', 902, 908),
+                ('expiration_date', 1008, 1018),
+            ]
+            
+            for field_name, start, end in field_mappings:
+                try:
+                    if field_name == 'rut_number':
+                        rut_number = cls._extract_field(line, start, end, field_name)
+                    elif field_name == 'rut_digit':
+                        rut_digit = cls._extract_field(line, start, end, field_name)
+                        metadata_fields['rut'] = f"{rut_number}{rut_digit}"
+                    else:
+                        metadata_fields[field_name] = cls._extract_field(line, start, end, field_name)
+                except ValueError as e:
+                    logger.warning(f"Error en campo {field_name}: {e}")
+                    metadata_fields[field_name] = ""  # Valor por defecto en caso de error
+            
+            # Extraer teléfonos con manejo específico
+            try:
+                personal_phone = cls._extract_field(line, 377, 392, 'personal_phone')
+            except ValueError as e:
+                logger.warning(f"Error extrayendo personal_phone: {e}")
+                personal_phone = ""
+            
+            try:
+                cell_phone = cls._extract_field(line, 397, 412, 'cell_phone')
+            except ValueError as e:
+                logger.warning(f"Error extrayendo cell_phone: {e}")
+                cell_phone = ""
+            
+            # Crear metadata con validación
+            try:
+                metadata = MetadataUser(**metadata_fields)
+            except Exception as e:
+                raise ValueError(f"Error creando MetadataUser: {str(e)}. Campos: {metadata_fields}")
+            
+            # Aplicar lógica de intercambio de teléfonos
+            phone_1 = f"+56{personal_phone}" if personal_phone else ""
+            phone_2 = f"+56{cell_phone}" if cell_phone else ""
+            
+            # Validación y intercambio de teléfonos
+            if not phone_1 or phone_1 == "+56":
+                if phone_2 and phone_2 != "+56":
+                    logger.info(f"Intercambiando teléfonos: cell_phone '{cell_phone}' -> phone_number")
+                    phone_1 = phone_2
+                    phone_2 = ""
+                else:
+                    raise ValueError(f"No se encontró número de teléfono válido. personal_phone='{personal_phone}', cell_phone='{cell_phone}'")
+            
+            # Limpiar phone_2 si está vacío
+            if phone_2 == "+56":
+                phone_2 = ""
+            
+            # Extraer ID limpio
+            id_parte = carga_id.split('-', 1)[1] if '-' in carga_id else carga_id
+            
+            logger.debug(f"Registro creado exitosamente: phone_number='{phone_1}', phone_number_2='{phone_2}'")
+            
+            return cls(
+                fecha=fecha_utc,
+                id=id_parte,
+                phone_number=phone_1[:15],
+                phone_number_2=phone_2[:15] if phone_2 else "",
+                metadata_user=metadata
+            )
+            
+        except ValueError:
+            # Re-lanzar ValueError con contexto adicional
+            raise
+        except Exception as e:
+            error_msg = f"Error inesperado procesando línea (longitud={len(line)}): {str(e)}"
+            logger.error(error_msg)
+            raise ValueError(error_msg) from e
     
     @field_validator('phone_number')
     @classmethod
@@ -67,61 +138,123 @@ class DataRecord(BaseModel):
         return self
     
     @classmethod
-    def from_dict(cls, data: Dict[str, Any], carga_id: str, fecha_utc) -> "DataRecord":
-        """Crea un DataRecord desde un diccionario de datos"""
-        metadata = MetadataUser(
-            queue=data.get('queue', '').strip(),
-            queue_id_cyber=data.get('queue_id_cyber', '').strip(),
-            rut=data.get('rut', '').strip(),
-            name=data.get('name', '').strip(),
-            paternal_surname=data.get('paternal_surname', '').strip(),
-            maternal_surname=data.get('maternal_surname', '').strip(),
-            days_overdue=data.get('days_overdue', '').strip(),
-            monthly_payment=data.get('monthly_payment', '').strip(),
-            down_payment_option1=data.get('down_payment_option1', '').strip(),
-            process_date=data.get('process_date', '').strip(),
-            overdue_date1=data.get('overdue_date1', '').strip(),
-            overdue_amount1=data.get('overdue_amount1', '').strip(),
-            email=data.get('email', '').strip(),
-            card=data.get('card', '').strip(),
-            expiration_date=data.get('expiration_date', '').strip(),
-        )
+    def from_dict(cls, data: Dict[str, Any], carga_id: str, fecha_utc: str) -> "DataRecord":
+        """Crea un DataRecord desde un diccionario con manejo detallado de errores"""
+        try:
+            logger.debug(f"Procesando diccionario para carga_id: {carga_id}")
+            
+            # Lista de campos requeridos para MetadataUser
+            required_fields = ['queue', 'queue_id_cyber', 'rut', 'name', 'paternal_surname', 'maternal_surname']
+            missing_fields = [field for field in required_fields if not data.get(field, '').strip()]
+            
+            if missing_fields:
+                logger.warning(f"Campos faltantes o vacíos: {missing_fields}")
+            
+            metadata = MetadataUser(
+                queue=data.get('queue', '').strip(),
+                queue_id_cyber=data.get('queue_id_cyber', '').strip(),
+                rut=data.get('rut', '').strip(),
+                name=data.get('name', '').strip(),
+                paternal_surname=data.get('paternal_surname', '').strip(),
+                maternal_surname=data.get('maternal_surname', '').strip(),
+                days_overdue=data.get('days_overdue', '').strip(),
+                monthly_payment=data.get('monthly_payment', '').strip(),
+                down_payment_option1=data.get('down_payment_option1', '').strip(),
+                process_date=data.get('process_date', '').strip(),
+                overdue_date1=data.get('overdue_date1', '').strip(),
+                overdue_amount1=data.get('overdue_amount1', '').strip(),
+                email=data.get('email', '').strip(),
+                card=data.get('card', '').strip(),
+                expiration_date=data.get('expiration_date', '').strip(),
+            )
 
-        # Extraer ID de carga
-        if '-' in carga_id:
-            id_parte = carga_id.split('-', 1)[1]
-        else:
-            id_parte = carga_id
+            # Extraer y validar teléfonos
+            personal_phone = data.get('personal_phone', '').strip()
+            cell_phone = data.get('cell_phone', '').strip()
+            
+            logger.debug(f"Teléfonos originales: personal_phone='{personal_phone}', cell_phone='{cell_phone}'")
+            
+            # Aplicar lógica de intercambio
+            phone_1 = f"+56{personal_phone}" if personal_phone else ""
+            phone_2 = f"+56{cell_phone}" if cell_phone else ""
+            
+            if not phone_1 or phone_1 == "+56":
+                if phone_2 and phone_2 != "+56":
+                    logger.info(f"Intercambiando teléfonos: cell_phone '{cell_phone}' -> phone_number")
+                    phone_1 = phone_2
+                    phone_2 = ""
+                else:
+                    raise ValueError(f"No se encontró número de teléfono válido. personal_phone='{personal_phone}', cell_phone='{cell_phone}'")
+            
+            if phone_2 == "+56":
+                phone_2 = ""
+            
+            # Extraer ID limpio
+            id_parte = carga_id.split('-', 1)[1] if '-' in carga_id else carga_id
+            
+            logger.debug(f"Registro creado exitosamente desde dict: phone_number='{phone_1}', phone_number_2='{phone_2}'")
+            
+            return cls(
+                fecha=fecha_utc,
+                id=id_parte,
+                phone_number=phone_1[:15],
+                phone_number_2=phone_2[:15] if phone_2 else "",
+                metadata_user=metadata
+            )
+            
+        except ValueError:
+            raise
+        except Exception as e:
+            error_msg = f"Error inesperado procesando diccionario: {str(e)}"
+            logger.error(error_msg)
+            raise ValueError(error_msg) from e
+    @classmethod
+    def _extract_field(cls, line: str, start: int, end: int, field_name: str, strip: bool = True) -> str:
+        """
+        Extrae un campo de una línea de texto de ancho fijo con manejo de excepciones.
         
-        # Extraer y limpiar números de teléfono
-        personal_phone = data.get('personal_phone', '').strip()
-        cell_phone = data.get('cell_phone', '').strip()
-        
-        # ✅ LÓGICA DE INTERCAMBIO DE TELÉFONOS
-        phone_1 = f"+56{personal_phone}" if personal_phone else ""
-        phone_2 = f"+56{cell_phone}" if cell_phone else ""
-        
-        # Si phone_1 está vacío, intentar usar phone_2
-        if not phone_1 or phone_1 == "+56":
-            if phone_2 and phone_2 != "+56":
-                # Intercambiar: phone_2 se convierte en phone_1
-                phone_1 = phone_2
-                phone_2 = ""  # phone_2 queda vacío después del intercambio
-            else:
-                # Ambos están vacíos
-                raise ValueError("No se encontró ningún número de teléfono válido en el registro")
-        
-        # Si phone_2 está vacío o es solo "+56", convertir a string vacío
-        if not phone_2 or phone_2 == "+56":
-            phone_2 = ""
-        
-        return cls(
-            fecha=fecha_utc,
-            id=id_parte,
-            phone_number=phone_1[:15],  # Siempre tendrá un valor válido
-            phone_number_2=phone_2[:15] if phone_2 else "",  # Puede estar vacío
-            metadata_user=metadata
-        )
+        Args:
+            line: Línea de texto de origen
+            start: Posición inicial (0-indexed)
+            end: Posición final (exclusiva)
+            field_name: Nombre del campo para logging de errores
+            strip: Si debe remover espacios en blanco
+            
+        Returns:
+            str: Campo extraído
+            
+        Raises:
+            ValueError: Si hay error en la extracción del campo
+        """
+        try:
+            if not line:
+                raise ValueError(f"Línea vacía para extraer campo '{field_name}'")
+            
+            if start < 0 or end < 0:
+                raise ValueError(f"Posiciones negativas no permitidas para campo '{field_name}' (start={start}, end={end})")
+            
+            if start >= end:
+                raise ValueError(f"Posición inicial debe ser menor que final para campo '{field_name}' (start={start}, end={end})")
+            
+            if end > len(line):
+                logger.warning(f"Campo '{field_name}': línea más corta que esperado (longitud={len(line)}, end={end})")
+                # Ajustar end a la longitud de la línea
+                end = len(line)
+            
+            if start >= len(line):
+                logger.warning(f"Campo '{field_name}': posición inicial fuera de rango (start={start}, longitud={len(line)})")
+                return ""
+            
+            extracted = line[start:end]
+            result = extracted.strip() if strip else extracted
+            
+            logger.debug(f"Campo '{field_name}' extraído: posiciones [{start}:{end}] = '{result}'")
+            return result
+            
+        except Exception as e:
+            error_msg = f"Error extrayendo campo '{field_name}' en posiciones [{start}:{end}]: {str(e)}"
+            logger.error(error_msg)
+            raise ValueError(error_msg) from e
 
     def is_valid(self) -> bool:
         """Validates that critical fields are present, including phone_number."""
@@ -148,24 +281,6 @@ class DataRecord(BaseModel):
             }
         }
     )
-    
-    model_config = ConfigDict(
-        validate_assignment=True,
-        use_enum_values=True,
-        json_schema_extra={
-            "example": {
-                "id": 1,
-                "name": "Example record",
-                "value": 100.50,
-                "category": "example",
-                "is_active": True,
-                "created_at": "2023-01-01T00:00:00Z",
-                "updated_at": "2023-01-02T00:00:00Z",
-                "metadata": {"source": "api", "version": "1.0"}
-            }
-        }
-    )
-
 
 class ProcessingStats(BaseModel):
     """
