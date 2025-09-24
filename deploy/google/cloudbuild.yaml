@@ -1,10 +1,4 @@
 steps:
-  - id: 'shallow clone'
-    name: 'gcr.io/cloud-builders/git'
-    entrypoint: 'git'
-    args:
-      - 'fetch'
-      - '--unshallow'
   # Paso 1: Instalar dependencias
   - name: 'python:3.9'
     entrypoint: 'bash'
