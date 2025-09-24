@@ -50,6 +50,22 @@ class FirestoreConfig(BaseSettings):
         "env_file_encoding": "utf-8",
         "extra": "ignore"
     }
+class CloudStorageConfig(BaseSettings):
+    """Configuración para Google Cloud Storage."""
+    
+    project_id: str = Field(default="", description="ID del proyecto de Google Cloud")
+    bucket_name: str = Field(default="", description="Nombre del bucket")
+    
+    model_config = {
+        "env_prefix": "GCS_",
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+        "extra": "ignore"
+    }
+
+def get_cloud_storage_config() -> CloudStorageConfig:
+    """Obtiene la configuración de Cloud Storage."""
+    return CloudStorageConfig()
 
 def get_config() -> AppConfig:
     """

@@ -1,7 +1,6 @@
 import paramiko
 from typing import List, Dict, Any, Optional
 
-from src.models.registro_txt import RegistroTxt
 from src.models.registro_txt_full import RegistroTxtFull
 from ..utils.logger import get_logger
 from .base_service import BaseService

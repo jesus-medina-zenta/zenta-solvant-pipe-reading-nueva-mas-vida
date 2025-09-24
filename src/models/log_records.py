@@ -3,9 +3,15 @@ from typing import List, Optional
 from datetime import datetime
 
 class LogRecord(BaseModel):
-    id: str = Field(..., description="ID único de la carga")
-    start_date: datetime = Field(..., description="Fecha y hora de inicio")
-    end_date: datetime = Field(..., description="Fecha y hora de fin")
-    file_url: str = Field(..., description="URL o ruta del archivo procesado")
-    errors: Optional[List[str]] = Field(default_factory=list, description="Lista de errores encontrados")
-    status: str = Field(..., description="Estado final del proceso (OK/ERROR)")
+    id: str = Field(..., description="ID único del proceso")
+    fecha_inicio: datetime = Field(..., description="Fecha y hora de inicio")
+    fecha_fin: datetime = Field(..., description="Fecha y hora de finalización")
+    duracion_segundos: int = Field(..., description="Duración en segundos")
+    status: str = Field(..., description="Estado final del proceso")
+    registros_extraidos: int = Field(..., description="Número de registros extraídos")
+    registros_transformados: int = Field(0, description="Registros transformados (0 para extracción)")
+    registros_cargados: int = Field(0, description="Registros cargados (0 para extracción)")
+    errores: List[str] = Field(default_factory=list, description="Lista de errores")
+    archivo_sftp: str = Field(..., description="Archivo SFTP procesado")
+    csv_generado: Optional[str] = Field(None, description="URL de GCS del CSV generado")  # ✅ Cambio
+    pipeline_type: str = Field("EXTRACTION", description="Tipo de pipeline")
