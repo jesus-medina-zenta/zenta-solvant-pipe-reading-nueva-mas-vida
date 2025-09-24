@@ -5,7 +5,7 @@ steps:
     args:
       - '-c'
       - |
-        gcloud scheduler jobs create http ${_COMPONENT_NAME}-job \
+        gcloud scheduler jobs update http ${_COMPONENT_NAME}-job \
           --location ${_REGION} \
           --schedule="0 * * * *" \
           --uri="https://${_REGION}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${PROJECT_ID}/jobs/${_COMPONENT_NAME}-${_ENV}:run" \
