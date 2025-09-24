@@ -3,7 +3,7 @@ from typing import List, Dict, Any, Optional
 
 from src.models.registro_txt_full import RegistroTxtFull
 from src.utils.logger import get_logger
-from services.base_service import BaseService
+from src.services.base_service import BaseService
 
 logger = get_logger(__name__)
 

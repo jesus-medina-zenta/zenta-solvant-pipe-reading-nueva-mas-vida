@@ -3,7 +3,7 @@ Data models using Pydantic for validation.
 """
 from datetime import datetime, timezone
 from typing import Optional, Any, Dict
-from ..utils.logger import get_logger
+from src.utils.logger import get_logger
 from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 
 from src.models.metadata_user import MetadataUser
