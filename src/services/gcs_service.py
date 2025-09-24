@@ -1,6 +1,6 @@
 import asyncio
 import os
-from datetime import datetime, timezone, timedelta  # ✅ Agregar timedelta
+from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 
@@ -27,7 +27,6 @@ class CloudStorageService:
         """
         self.is_connected = False
         self.client: Optional[storage.Client] = None
-        # ✅ Configurar valores por defecto desde variables de entorno
         self.project_id = project_id or os.getenv('FIRESTORE_PROJECT_ID', 'znt-solvant-dev')
         self.bucket_name = bucket_name or os.getenv('GCS_BUCKET_NAME', f'{self.project_id}-csv-files')
         self.bucket: Optional[Bucket] = None
@@ -66,8 +65,7 @@ class CloudStorageService:
                 # ✅ Verificar/crear bucket de forma segura
                 try:
                     # Intentar una operación simple para verificar permisos
-                    # En lugar de bucket.reload() que requiere permisos específicos
-                    self.bucket.exists()  # ✅ Operación más ligera
+                    self.bucket.exists()  
                     logger.info(f"📂 Bucket verificado: {self.bucket_name}")
                     
                 except NotFound:
@@ -76,7 +74,7 @@ class CloudStorageService:
                         self.bucket = self._create_bucket()
                     except Exception as create_error:
                         logger.error(f"❌ No se pudo crear bucket: {create_error}")
-                        # ✅ Continuar sin crear bucket - lo intentaremos en runtime
+                        
                         logger.warning("⚠️ Continuando sin verificar bucket...")
                         
                 except Forbidden as e:
@@ -93,7 +91,6 @@ class CloudStorageService:
             
         except Exception as e:
             logger.error(f"❌ Error conectando a Cloud Storage: {e}")
-            # ✅ Información de debugging adicional
             logger.error(f"❌ Project ID: {self.project_id}")
             logger.error(f"❌ Bucket Name: {self.bucket_name}")
             logger.error(f"❌ Credentials: {os.getenv('GOOGLE_APPLICATION_CREDENTIALS', 'NO CONFIGURADO')}")
@@ -117,7 +114,7 @@ class CloudStorageService:
             logger.error(f"❌ Error creando bucket: {e}")
             raise
 
-    async def upload_csv_file(self, local_file_path: str, extraction_id: str) -> Optional[str]:  # ✅ Hacer async
+    async def upload_csv_file(self, local_file_path: str, extraction_id: str) -> Optional[str]:
         """
         Sube archivo CSV a Google Cloud Storage.
         
@@ -129,7 +126,7 @@ class CloudStorageService:
             str: URL gs:// del archivo en GCS o None si hay error
         """
         if not self.is_connected:
-            if not await self.connect():  # ✅ Agregar await
+            if not await self.connect(): 
                 logger.error("No se pudo conectar a GCS")
                 return None
         
@@ -156,7 +153,7 @@ class CloudStorageService:
                 'uploaded_at': str(datetime.now(timezone.utc))
             }
             
-            # Subir archivo de forma síncrona (la librería de GCS es síncrona)
+            # Subir archivo de forma síncrona
             blob.upload_from_filename(local_file_path, content_type='text/csv')
             
             # Generar URL gs:// para uso interno

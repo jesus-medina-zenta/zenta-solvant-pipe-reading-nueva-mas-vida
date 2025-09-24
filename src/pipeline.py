@@ -83,19 +83,6 @@ class Pipeline:
                 csv_location=csv_location
             )
 
-            #Paso 5: Activar pípeline de transformación
-            logger.info("Activando pipeline de transformación si corresponde")
-            if gcs_url:
-                try: 
-                    logger.info("Activando pipeline de transformación")
-                    await self._trigger_transformation_pipeline(gcs_url, id)
-                except Exception as e:
-                    logger.error(f"Error al activar el pipeline de transformación: {e}")
-                    self.errors.append(f"Error al activar el pipeline de transformación: {e}")
-            else:
-                logger.warning("No se activará el pipeline de transformación por error en la subida a GCS")
-                self.errors.append("No se activará el pipeline de transformación por error en la subida a GCS")
-
             logger.info("Pipeline completado exitosamente")
             return True
         
@@ -257,12 +244,12 @@ class Pipeline:
                 
                 field_mappings = [
                     ('queue', 0, 4),
-                    ('queue_id_cyber', 0, 4),  # Mismo que queue
+                    ('queue_id_cyber', 0, 4), 
                     ('rut_number', 4, 12),
                     ('rut_digit', 12, 13),
                     ('name', 48, 128),
                     ('paternal_surname', 128, 208),
-                    ('maternal_surname', 208, 212),  # Verificar si este rango es correcto
+                    ('maternal_surname', 208, 212), 
                     ('personal_phone', 377, 392),    # Teléfono personal
                     ('cell_phone', 397, 412),        # Teléfono celular
                     ('days_overdue', 473, 478),
@@ -300,7 +287,6 @@ class Pipeline:
                         extracted_data[field_name] = ""
                 
             elif isinstance(raw_record, dict):
-                # Si ya es un dict, tomar solo los campos necesarios
                 extracted_data = {
                     'queue': raw_record.get('queue', ''),
                     'queue_id_cyber': raw_record.get('queue_id_cyber', ''),
