@@ -4,7 +4,7 @@ FROM python:3.9-slim
 # Establecer variables de entorno
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app/src
+    PYTHONPATH=/app
 
 # Instalar dependencias del sistema
 RUN apt-get update && apt-get install -y \
@@ -26,6 +26,9 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copiar el código fuente
 COPY src/ ./src/
 
+# AGREGAR archivo __init__.py para que src sea reconocido como paquete
+RUN touch src/__init__.py
+
 # Crear usuario no-root para seguridad
 RUN groupadd -r appuser && useradd -r -g appuser appuser
 RUN chown -R appuser:appuser /app
@@ -35,5 +38,5 @@ USER appuser
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD python -c "import sys; sys.exit(0)"
 
-# Comando por defecto
-CMD ["python", "src/main.py"]
+# ✅ CAMBIAR comando para ejecutar como módulo
+CMD ["python", "-m", "src.main"]

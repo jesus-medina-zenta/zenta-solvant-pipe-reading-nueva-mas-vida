@@ -8,11 +8,11 @@ import requests
 from src.services.gcs_service import CloudStorageService
 
 
-from .config import get_sftp_config
-from .services.sftp_service import SFTPService
+from src.config import get_sftp_config
+from src.services.sftp_service import SFTPService
 from src.models.log_records import LogRecord
 from src.services.firestore_service import FirestoreService 
-from .utils.logger import get_logger
+from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 

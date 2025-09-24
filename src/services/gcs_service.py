@@ -8,7 +8,7 @@ from google.cloud import storage
 from google.cloud.exceptions import NotFound, Forbidden
 from google.cloud.storage import Bucket, Blob
 
-from ..utils.logger import get_logger
+from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 

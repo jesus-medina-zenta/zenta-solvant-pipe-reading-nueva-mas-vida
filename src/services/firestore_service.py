@@ -3,7 +3,7 @@ from google.cloud import firestore
 from src.models.log_records import LogRecord
 from src.models.data_models import DataRecord
 from src.utils.logger import get_logger
-from ..config import get_firestore_config
+from src.config import get_firestore_config
 import os
 from dotenv import load_dotenv
 load_dotenv()
