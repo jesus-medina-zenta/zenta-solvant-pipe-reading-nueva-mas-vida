@@ -3,7 +3,7 @@ Punto de entrada principal de la aplicación.
 """
 import sys
 import asyncio
-
+import os
 from src.config import init_config
 from src.pipeline import Pipeline
 from src.utils.logger import get_logger
@@ -11,7 +11,6 @@ from src.utils.logger import get_logger
 # Inicializar configuración
 config = init_config()
 logger = get_logger(__name__)
-
 
 async def main() -> int:
     """

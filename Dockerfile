@@ -37,6 +37,4 @@ USER appuser
 # Healthcheck
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD python -c "import sys; sys.exit(0)"
-
-# ✅ CAMBIAR comando para ejecutar como módulo
 CMD ["python", "-m", "src.main"]

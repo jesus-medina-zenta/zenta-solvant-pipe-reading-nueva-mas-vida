@@ -63,9 +63,27 @@ class CloudStorageConfig(BaseSettings):
         "extra": "ignore"
     }
 
+class CloudRunConfig(BaseSettings):
+    """Configuración para Google Cloud Run."""
+    
+    project_id: str = Field(default="", description="ID del proyecto de Google Cloud")
+    region: str = Field(default="us-central1", description="Región de Cloud Run")
+    job_name: str = Field(default="", description="Nombre del Cloud Run Job")
+    
+    model_config = {
+        "env_prefix": "GCP_",
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+        "extra": "ignore"
+    }
+
 def get_cloud_storage_config() -> CloudStorageConfig:
     """Obtiene la configuración de Cloud Storage."""
     return CloudStorageConfig()
+
+def get_cloud_run_config() -> CloudRunConfig:
+    """Obtiene la configuración de Cloud Run."""
+    return CloudRunConfig()
 
 def get_config() -> AppConfig:
     """
