@@ -46,7 +46,7 @@ class CloudStorageService:
             logger.info(f"Project ID: {self.project_id}")
             logger.info(f"Bucket: {self.bucket_name}")
             
-            # ✅ Verificar credenciales
+            #  Verificar credenciales
             credentials_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
             if credentials_path and not os.path.exists(credentials_path):
                 logger.error(f"❌ Archivo de credenciales no existe: {credentials_path}")

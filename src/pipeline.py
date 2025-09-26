@@ -5,6 +5,7 @@ import os
 import csv
 import requests
 
+from src.services.execute_job import CloudRunService
 from src.services.gcs_service import CloudStorageService
 
 
@@ -29,6 +30,7 @@ class Pipeline:
         self.sftp_service = SFTPService(get_sftp_config())
         self.firestore_service = FirestoreService()
         self.gcs_service = CloudStorageService()
+        self.cloud_run_service = CloudRunService()
         self.errors = []
 
     async def run(self) -> bool:
@@ -83,6 +85,13 @@ class Pipeline:
                 csv_location=csv_location
             )
 
+            if gcs_url:
+                logger.info("Activando pipeline de transformación")
+                await self._trigger_transformation_pipeline(gcs_url, id)
+            else:
+                logger.warning("No se activará pipeline de transformación - CSV no está en GCS")
+                self.errors.append("Pipeline de transformación no activado - CSV no disponible en GCS")
+
             logger.info("Pipeline completado exitosamente")
             return True
         
@@ -108,6 +117,7 @@ class Pipeline:
             self.sftp_service.disconnect()
             self.firestore_service.disconnect()
             await self.gcs_service.disconnect()
+            self.cloud_run_service.disconnect()
             
             if self.start_time:
                 duration = (datetime.now(timezone.utc) - self.start_time).total_seconds()
@@ -405,3 +415,33 @@ class Pipeline:
             logger.error(f"Error en upload a GCS: {e}")
             self.errors.append(f"Error en upload a GCS: {e}")
             return None
+
+    async def _trigger_transformation_pipeline(self, gcs_url: str, extraction_id: str):
+        """
+        Activa el pipeline de transformación mediante Cloud Run Job.
+        
+        Args:
+            gcs_url: URL de GCS del archivo CSV
+            extraction_id: ID de la extracción
+        """
+        try:
+            logger.info("🚀 Activando pipeline de transformación via Cloud Run Job")
+            
+            execution_name = await self.cloud_run_service.execute_transformation_job(
+                extraction_id=extraction_id,
+                gcs_csv_url=gcs_url
+            )
+            
+            if execution_name:
+                logger.info(f"✅ Pipeline de transformación activado exitosamente")
+                logger.info(f"🔄 Execution: {execution_name}")
+                
+            else:
+                logger.warning("⚠️ No se pudo activar pipeline de transformación")
+                self.errors.append("No se pudo ejecutar job de transformación")
+                
+        except Exception as e:
+            logger.error(f"❌ Error activando pipeline de transformación: {e}")
+            self.errors.append(f"Error ejecutando job de transformación: {e}")
+            
+        logger.info(f"📋 Datos disponibles para transformación - ID: {extraction_id}, Status: PENDIENTE")
