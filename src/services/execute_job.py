@@ -55,7 +55,7 @@ class CloudRunService:
             logger.error("💡 Verificar que GOOGLE_APPLICATION_CREDENTIALS está configurado correctamente")
             return False
 
-    async def execute_transformation_job(self, extraction_id: str = None, gcs_csv_url: str = None) -> Optional[str]:
+    async def execute_transformation_job(self, extraction_id: Optional[str] = None, gcs_csv_url: Optional[str] = None) -> Optional[str]:
         """
         Ejecuta el job de transformación.
         """
