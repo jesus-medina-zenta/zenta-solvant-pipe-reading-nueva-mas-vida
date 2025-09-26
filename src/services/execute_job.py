@@ -126,27 +126,6 @@ class CloudRunService:
             logger.error(f"❌ Tipo de error: {type(e)}")
             return None
 
-    async def trigger_transformation_pipeline(self, extraction_id: str, gcs_csv_url: str) -> bool:
-        """
-        Método simplificado para activar el pipeline de transformación.
-        """
-        try:
-            logger.info("🚀 Activando pipeline de transformación...")
-            
-            execution_name = await self.execute_transformation_job(extraction_id, gcs_csv_url)
-            
-            if execution_name:
-                logger.info("✅ Pipeline de transformación activado exitosamente")
-                logger.info(f"💡 El job procesará todos los registros PENDIENTES en Firestore")
-                
-                return True
-            else:
-                logger.warning("⚠️ No se pudo activar pipeline de transformación")
-                return False
-                
-        except Exception as e:
-            logger.error(f"❌ Error activando pipeline de transformación: {e}")
-            return False
 
     def disconnect(self) -> None:
         """
