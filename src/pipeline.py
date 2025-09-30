@@ -30,6 +30,7 @@ class Pipeline:
         self.sftp_service = SFTPService(get_sftp_config())
         self.firestore_service = FirestoreService()
         self.gcs_service = CloudStorageService()
+        
         self.cloud_run_service = CloudRunService()
         self.errors = []
 
