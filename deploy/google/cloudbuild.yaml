@@ -69,6 +69,7 @@ steps:
       - '--set-env-vars=GCP_REGION=${_REGION}'
       - '--set-env-vars=GCP_JOB_NAME=${_GCP_JOB_NAME}'
       - '--set-env-vars=GCP_PROJECT_ID=$PROJECT_ID'
+      
 
 # Configuraciones adicionales
 options:
