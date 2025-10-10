@@ -88,7 +88,7 @@ class Pipeline:
 
             if gcs_url:
                 logger.info("Activando pipeline de transformación")
-                await self._trigger_transformation_pipeline(gcs_url, id)
+                # await self._trigger_transformation_pipeline(gcs_url, id)
             else:
                 logger.warning("No se activará pipeline de transformación - CSV no está en GCS")
                 self.errors.append("Pipeline de transformación no activado - CSV no disponible en GCS")
