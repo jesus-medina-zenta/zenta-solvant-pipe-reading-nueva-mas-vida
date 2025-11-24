@@ -80,6 +80,7 @@ class RegistroTxtFull(BaseModel):
     rate: str
     cae: str
     expiration_date: str
+    gender: str
 
     @classmethod
     def from_line(cls, line: str) -> "RegistroTxtFull":
@@ -163,4 +164,5 @@ class RegistroTxtFull(BaseModel):
             rate=line[998:1003].strip(),
             cae=line[1003:1008].strip(),
             expiration_date=line[1008:1018].strip(),
+            gender=line[1028:1029].strip()
         )

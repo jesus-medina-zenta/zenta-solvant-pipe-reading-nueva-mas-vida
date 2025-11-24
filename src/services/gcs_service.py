@@ -58,42 +58,42 @@ class CloudStorageService:
             else:
                 self.client = storage.Client()
             
-            # ✅ Configurar bucket de forma segura
+            #  Configurar bucket de forma segura
             if self.bucket_name:
                 self.bucket = self.client.bucket(self.bucket_name)
                 
-                # ✅ Verificar/crear bucket de forma segura
+                #  Verificar/crear bucket de forma segura
                 try:
                     # Intentar una operación simple para verificar permisos
                     self.bucket.exists()  
-                    logger.info(f"📂 Bucket verificado: {self.bucket_name}")
+                    logger.info(f" Bucket verificado: {self.bucket_name}")
                     
                 except NotFound:
                     logger.info(f"Bucket '{self.bucket_name}' no existe, creándolo...")
                     try:
                         self.bucket = self._create_bucket()
                     except Exception as create_error:
-                        logger.error(f"❌ No se pudo crear bucket: {create_error}")
+                        logger.error(f" No se pudo crear bucket: {create_error}")
                         
-                        logger.warning("⚠️ Continuando sin verificar bucket...")
+                        logger.warning(" Continuando sin verificar bucket...")
                         
                 except Forbidden as e:
-                    logger.warning(f"⚠️ Sin permisos para verificar bucket: {e}")
-                    logger.warning("⚠️ Continuando asumiendo que el bucket existe...")
+                    logger.warning(f" Sin permisos para verificar bucket: {e}")
+                    logger.warning(" Continuando asumiendo que el bucket existe...")
                     
                 except Exception as e:
-                    logger.warning(f"⚠️ Error verificando bucket: {e}")
-                    logger.warning("⚠️ Continuando sin verificación...")
+                    logger.warning(f" Error verificando bucket: {e}")
+                    logger.warning(" Continuando sin verificación...")
             
             self.is_connected = True
-            logger.info("✅ Conexión a Cloud Storage establecida exitosamente")
+            logger.info(" Conexión a Cloud Storage establecida exitosamente")
             return True
             
         except Exception as e:
-            logger.error(f"❌ Error conectando a Cloud Storage: {e}")
-            logger.error(f"❌ Project ID: {self.project_id}")
-            logger.error(f"❌ Bucket Name: {self.bucket_name}")
-            logger.error(f"❌ Credentials: {os.getenv('GOOGLE_APPLICATION_CREDENTIALS', 'NO CONFIGURADO')}")
+            logger.error(f" Error conectando a Cloud Storage: {e}")
+            logger.error(f" Project ID: {self.project_id}")
+            logger.error(f" Bucket Name: {self.bucket_name}")
+            logger.error(f" Credentials: {os.getenv('GOOGLE_APPLICATION_CREDENTIALS', 'NO CONFIGURADO')}")
             self.is_connected = False
             return False
     
@@ -107,11 +107,11 @@ class CloudStorageService:
             bucket.versioning_enabled = True
             bucket.patch()
             
-            logger.info(f"✅ Bucket '{self.bucket_name}' creado exitosamente")
+            logger.info(f" Bucket '{self.bucket_name}' creado exitosamente")
             return bucket
             
         except Exception as e:
-            logger.error(f"❌ Error creando bucket: {e}")
+            logger.error(f" Error creando bucket: {e}")
             raise
 
     async def upload_csv_file(self, local_file_path: str, extraction_id: str) -> Optional[str]:
@@ -140,7 +140,7 @@ class CloudStorageService:
             fecha = extraction_id.split('-')[0] if '-' in extraction_id else 'unknown'
             gcs_blob_name = f"extractions/{fecha}/{extraction_id}/{file_name}"
             
-            logger.info(f"📤 Subiendo archivo a GCS: {gcs_blob_name}")
+            logger.info(f" Subiendo archivo a GCS: {gcs_blob_name}")
             
             # Crear blob y subir archivo
             blob: Blob = self.bucket.blob(gcs_blob_name)
@@ -159,26 +159,26 @@ class CloudStorageService:
             # Generar URL gs:// para uso interno
             gs_url = f"gs://{self.bucket_name}/{gcs_blob_name}"
             
-            logger.info(f"✅ Archivo subido exitosamente a GCS: {gs_url}")
+            logger.info(f" Archivo subido exitosamente a GCS: {gs_url}")
             
             # Limpiar archivo local después de subir exitosamente
             try:
                 os.remove(local_file_path)
-                logger.info(f"🗑️ Archivo local eliminado: {local_file_path}")
+                logger.info(f" Archivo local eliminado: {local_file_path}")
             except Exception as e:
-                logger.warning(f"⚠️ No se pudo eliminar archivo local: {e}")
+                logger.warning(f" No se pudo eliminar archivo local: {e}")
             
             return gs_url
             
         except Exception as e:
-            logger.error(f"❌ Error subiendo archivo a GCS: {e}")
+            logger.error(f" Error subiendo archivo a GCS: {e}")
             return None
 
 
     async def disconnect(self) -> None:  # ✅ Hacer async
         """Cierra conexión con GCS."""
         if self.client:
-            # ✅ Google Cloud Storage client no necesita close() explícito
+            #  Google Cloud Storage client no necesita close() explícito
             self.client = None
             self.bucket = None
             self.is_connected = False
