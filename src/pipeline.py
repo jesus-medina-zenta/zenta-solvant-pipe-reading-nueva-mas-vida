@@ -11,8 +11,8 @@ from src.services.gcs_service import CloudStorageService
 
 from src.config import get_sftp_config
 from src.services.sftp_service import SFTPService
+from src.services.firestore_service import FirestoreService
 from src.models.log_records import LogRecord
-from src.services.firestore_service import FirestoreService 
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -188,7 +188,8 @@ class Pipeline:
                 'overdue_amount1',
                 'email',
                 'card',
-                'expiration_date'
+                'expiration_date',
+                'gender'
             ]
             
             with open(csv_file_path, 'w', newline='', encoding='utf-8') as csvfile:
@@ -227,7 +228,8 @@ class Pipeline:
                             'overdue_amount1': '',
                             'email': '',
                             'card': '',
-                            'expiration_date': ''
+                            'expiration_date': '',
+                            'gender': ''
                         }
                         writer.writerow(error_record)
             
@@ -272,6 +274,7 @@ class Pipeline:
                     ('email', 822, 882),
                     ('card', 902, 908),
                     ('expiration_date', 1008, 1018),
+                    ('gender', 1028, 1029)
                 ]
                 
                 extracted_data = {}
@@ -318,6 +321,7 @@ class Pipeline:
                     'email': raw_record.get('email', ''),
                     'card': raw_record.get('card', ''),
                     'expiration_date': raw_record.get('expiration_date', ''),
+                    'gender': raw_record.get('gender', '')
                 }
             else:
                 raise ValueError(f"Tipo de registro no soportado: {type(raw_record)}")
