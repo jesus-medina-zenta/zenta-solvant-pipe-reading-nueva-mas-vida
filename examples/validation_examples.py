@@ -6,7 +6,6 @@ from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-
 def ejemplo_validador_basico():
     """Ejemplo de uso del validador básico."""
     print("🔍 Ejemplo: Validador Básico")
