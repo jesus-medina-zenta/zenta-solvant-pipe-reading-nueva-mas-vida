@@ -55,8 +55,13 @@ class Pipeline:
                 logger.warning("No se encontraron datos para procesar")
                 status = "NO_DATA"
                 self.errors.append("No se encontraron datos para procesar")
+                if self.sftp_service.last_error:
+                    sftp_error_msg = f"Fallo de conexión/extracción SFTP: {self.sftp_service.last_error}"
+                    logger.error(sftp_error_msg)
+                    self.errors.append(sftp_error_msg)
+                    status = "ERROR"
                 await self._save_extraction_log(id, status, 0, 0, self.errors, fecha_utc, None)
-                return True
+                return status != "ERROR"
 
             # Paso 2: Convert to CSV
             logger.info("Iniciando transformación de datos")
@@ -189,7 +194,10 @@ class Pipeline:
                 'email',
                 'card',
                 'expiration_date',
-                'gender'
+                'gender',
+                
+                # URL de pago
+                'url_link'
             ]
             
             with open(csv_file_path, 'w', newline='', encoding='utf-8') as csvfile:
@@ -229,7 +237,8 @@ class Pipeline:
                             'email': '',
                             'card': '',
                             'expiration_date': '',
-                            'gender': ''
+                            'gender': '',
+                            'url_link': ''
                         }
                         writer.writerow(error_record)
             
@@ -300,28 +309,56 @@ class Pipeline:
                         logger.warning(f"Error extrayendo campo {field_name}: {e}")
                         extracted_data[field_name] = ""
                 
+                # url_link no se extrae de formato de texto fijo (SFTP), será vacío
+                extracted_data['url_link'] = ""
+                
             elif isinstance(raw_record, dict):
+                # Resuelve campos aceptando nombres de columnas CSV (rut_deudor, fono_contacto, etc.)
+                # y nombres de RegistroTxtFull (rut, name, personal_phone, etc.)
+                def _val(*keys: str) -> str:
+                    for k in keys:
+                        v = str(raw_record.get(k, '') or '').strip()
+                        if v:
+                            return v
+                    return ''
+
+                rut_full = _val('rut', 'rut_deudor', 'rut_completo')
+                rut_number = _val('rut_number', 'rut_numero')
+                rut_digit  = _val('rut_digit', 'rut_digito', 'dv')
+
+                # Si no vienen separados, derivarlos del RUT completo
+                if not rut_number and rut_full:
+                    clean = rut_full.replace('.', '').replace(' ', '')
+                    if '-' in clean:
+                        parts = clean.rsplit('-', 1)
+                        rut_number = parts[0]
+                        rut_digit  = parts[1] if len(parts) > 1 else ''
+                    elif len(clean) > 1:
+                        rut_number = clean[:-1]
+                        rut_digit  = clean[-1]
+
                 extracted_data = {
-                    'queue': raw_record.get('queue', ''),
-                    'queue_id_cyber': raw_record.get('queue_id_cyber', ''),
-                    'rut_number': raw_record.get('rut_number', ''),
-                    'rut_digit': raw_record.get('rut_digit', ''),
-                    'rut': raw_record.get('rut', ''),
-                    'name': raw_record.get('name', ''),
-                    'paternal_surname': raw_record.get('paternal_surname', ''),
-                    'maternal_surname': raw_record.get('maternal_surname', ''),
-                    'personal_phone': raw_record.get('personal_phone', ''),
-                    'cell_phone': raw_record.get('cell_phone', ''),
-                    'days_overdue': raw_record.get('days_overdue', ''),
-                    'monthly_payment': raw_record.get('monthly_payment', ''),
-                    'down_payment_option1': raw_record.get('down_payment_option1', ''),
-                    'process_date': raw_record.get('process_date', ''),
-                    'overdue_date1': raw_record.get('overdue_date1', ''),
-                    'overdue_amount1': raw_record.get('overdue_amount1', ''),
-                    'email': raw_record.get('email', ''),
-                    'card': raw_record.get('card', ''),
-                    'expiration_date': raw_record.get('expiration_date', ''),
-                    'gender': raw_record.get('gender', '')
+                    'queue':             _val('queue', 'tipo_deudor', 'queue_id_cyber'),
+                    'queue_id_cyber':    _val('queue_id_cyber', 'queue', 'tipo_deudor'),
+                    'rut_number':        rut_number,
+                    'rut_digit':         rut_digit,
+                    'rut':               rut_full or (f"{rut_number}-{rut_digit}" if rut_number else ''),
+                    'name':              _val('name', 'nombre_deudor', 'nombre', 'nombres'),
+                    'paternal_surname':  _val('paternal_surname', 'apellido_paterno', 'apellido'),
+                    'maternal_surname':  _val('maternal_surname', 'apellido_materno'),
+                    'personal_phone':    _val('personal_phone', 'fono_contacto', 'telefono', 'celular'),
+                    'cell_phone':        _val('cell_phone', 'fono_contacto', 'celular', 'personal_phone'),
+                    'days_overdue':      _val('days_overdue', 'dias_mora', 'dias_vencido'),
+                    'monthly_payment':   _val('monthly_payment', 'deuda_cotizaciones', 'monto_cotizaciones', 'monto_mensual'),
+                    'down_payment_option1': _val('down_payment_option1', 'monto_cupon', 'monto_con_descuento'),
+                    'process_date':      _val('process_date', 'fecha_compromiso', 'fecha_proceso'),
+                    'overdue_date1':     _val('overdue_date1', 'fecha_mora', 'menor_per_deuda', 'fecha_vencimiento'),
+                    'overdue_amount1':   _val('overdue_amount1', 'deuda_cotizaciones', 'monto_cotizaciones', 'monto_vencido'),
+                    'email':             _val('email', 'email_destinatario', 'correo'),
+                    'card':              _val('card', 'tarjeta'),
+                    'expiration_date':   _val('expiration_date', 'fecha_expiracion', 'vencimiento_tarjeta'),
+                    'gender':            _val('gender', 'genero', 'sexo'),
+                    'url_link':          _val('url_link', 'link_pago', 'payment_link', 'url_pago', 'link'),
                 }
             else:
                 raise ValueError(f"Tipo de registro no soportado: {type(raw_record)}")
