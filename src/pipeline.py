@@ -195,9 +195,18 @@ class Pipeline:
                 'card',
                 'expiration_date',
                 'gender',
-                
+
                 # URL de pago
-                'url_link'
+                'url_link',
+
+                # Campos del esquema de negocio (cliente) sin equivalente en el
+                # esquema legado orientado a TXT de ancho fijo - se preservan
+                # tal cual para que el pipeline de transformacion los use.
+                'menor_per_deuda',
+                'mayor_per_deuda',
+                'monto_posible_compensar',
+                'monto_compromiso',
+                'fecha_compromiso',
             ]
             
             with open(csv_file_path, 'w', newline='', encoding='utf-8') as csvfile:
@@ -238,7 +247,12 @@ class Pipeline:
                             'card': '',
                             'expiration_date': '',
                             'gender': '',
-                            'url_link': ''
+                            'url_link': '',
+                            'menor_per_deuda': '',
+                            'mayor_per_deuda': '',
+                            'monto_posible_compensar': '',
+                            'monto_compromiso': '',
+                            'fecha_compromiso': '',
                         }
                         writer.writerow(error_record)
             
@@ -309,9 +323,14 @@ class Pipeline:
                         logger.warning(f"Error extrayendo campo {field_name}: {e}")
                         extracted_data[field_name] = ""
                 
-                # url_link no se extrae de formato de texto fijo (SFTP), será vacío
+                # Campos que no existen en el formato de texto fijo (SFTP)
                 extracted_data['url_link'] = ""
-                
+                extracted_data['menor_per_deuda'] = ""
+                extracted_data['mayor_per_deuda'] = ""
+                extracted_data['monto_posible_compensar'] = ""
+                extracted_data['monto_compromiso'] = ""
+                extracted_data['fecha_compromiso'] = ""
+
             elif isinstance(raw_record, dict):
                 # Resuelve campos aceptando nombres de columnas CSV (rut_deudor, fono_contacto, etc.)
                 # y nombres de RegistroTxtFull (rut, name, personal_phone, etc.)
@@ -359,6 +378,11 @@ class Pipeline:
                     'expiration_date':   _val('expiration_date', 'fecha_expiracion', 'vencimiento_tarjeta'),
                     'gender':            _val('gender', 'genero', 'sexo'),
                     'url_link':          _val('url_link', 'link_pago', 'payment_link', 'url_pago', 'link'),
+                    'menor_per_deuda':   _val('menor_per_deuda', 'periodo_minimo_deuda', 'periodo_menor_deuda'),
+                    'mayor_per_deuda':   _val('mayor_per_deuda', 'periodo_maximo_deuda', 'periodo_mayor_deuda'),
+                    'monto_posible_compensar': _val('monto_posible_compensar', 'saldo_compensar', 'monto_compensar'),
+                    'monto_compromiso': _val('monto_compromiso', 'commitment_amount', 'monto_promesa'),
+                    'fecha_compromiso': _val('fecha_compromiso', 'fecha_de_compromiso', 'commitment_date'),
                 }
             else:
                 raise ValueError(f"Tipo de registro no soportado: {type(raw_record)}")
