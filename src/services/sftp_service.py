@@ -2,6 +2,7 @@ import paramiko
 from typing import List, Dict, Any, Optional
 
 from src.models.registro_txt_full import RegistroTxtFull
+from src.utils.client_record import decode_content, detect_delimiter
 from src.utils.logger import get_logger
 from src.services.base_service import BaseService
 
@@ -69,7 +70,8 @@ class SFTPService(BaseService):
                 logger.error("Cliente SFTP no inicializado; extracción cancelada")
                 return []
             with self.sftp_client.open(remote_path, 'r') as f:
-                content = f.read().decode('utf-8')
+                # El archivo del cliente viene en cp1252; decode_content prueba UTF-8 primero
+                content = decode_content(f.read())
 
             ext = remote_path.rsplit('.', 1)[-1].lower() if '.' in remote_path else ''
             if ext == 'csv':
@@ -82,12 +84,13 @@ class SFTPService(BaseService):
             return []
 
     def _parse_csv(self, content: str) -> List[Dict[str, Any]]:
-        """Parsea contenido CSV con cabecera y retorna lista de dicts."""
+        """Parsea contenido CSV con cabecera (separador ',' o ';') y retorna lista de dicts."""
         import csv
         import io
-        reader = csv.DictReader(io.StringIO(content))
-        data = [dict(row) for row in reader]
-        logger.info(f"Extraídos {len(data)} registros desde SFTP (CSV)")
+        delimiter = detect_delimiter(content)
+        reader = csv.DictReader(io.StringIO(content), delimiter=delimiter)
+        data = [dict(row) for row in reader if any((v or "").strip() for v in row.values() if isinstance(v, str))]
+        logger.info(f"Extraídos {len(data)} registros desde SFTP (CSV, separador '{delimiter}')")
         return data
 
     def _parse_fixed_width(self, content: str) -> List[Dict[str, Any]]:

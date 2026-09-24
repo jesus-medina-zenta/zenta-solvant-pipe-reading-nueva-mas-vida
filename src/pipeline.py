@@ -13,6 +13,7 @@ from src.config import get_sftp_config
 from src.services.sftp_service import SFTPService
 from src.services.firestore_service import FirestoreService
 from src.models.log_records import LogRecord
+from src.utils.client_record import is_client_format, is_employer, parse_client_row
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -136,10 +137,22 @@ class Pipeline:
         try:
             remote_path = self.file_url
             data = self.sftp_service.extract(remote_path)
-            return data
+            return self._exclude_employers(data)
         except Exception as e:
             logger.error(f"Error en la extracción SFTP: {e}")
             return []
+
+    @staticmethod
+    def _exclude_employers(data: List[Any]) -> List[Any]:
+        """
+        Deja fuera a las empresas (Tipo Deudor = Empleador): la campaña llama solo
+        a afiliados, y el guion del agente no aplica a un empleador.
+        """
+        kept = [r for r in data if not (isinstance(r, dict) and is_client_format(r) and is_employer(r))]
+        excluded = len(data) - len(kept)
+        if excluded:
+            logger.info(f"Excluidos {excluded} registros de empresas (Tipo Deudor = Empleador)")
+        return kept
 
     async def _convert_to_csv(self, raw_data: List[Dict[str, Any]], extraction_id: str) -> str:
         """
@@ -207,10 +220,26 @@ class Pipeline:
                 'monto_posible_compensar',
                 'monto_compromiso',
                 'fecha_compromiso',
+
+                # Campos del archivo de deudores de Nueva Masvida (ver utils/client_record.py)
+                'rut_deudor',
+                'nombre_deudor',
+                'nombre_llamada',
+                'primer_nombre',
+                'deuda_cotizaciones',
+                'n_periodos',
+                'ciudad',
+                'clasificacion_deudor',
+                'tipo_deudor',
+                'estado_vigencia',
+                'fin_vigencia',
+                'tramo_deuda',
+                'tipo_cartera',
             ]
-            
+
             with open(csv_file_path, 'w', newline='', encoding='utf-8') as csvfile:
-                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                # restval='' deja vacías las columnas que un formato de origen no trae
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames, restval='')
                 
                 # Escribir headers
                 writer.writeheader()
@@ -330,6 +359,43 @@ class Pipeline:
                 extracted_data['monto_posible_compensar'] = ""
                 extracted_data['monto_compromiso'] = ""
                 extracted_data['fecha_compromiso'] = ""
+
+            elif isinstance(raw_record, dict) and is_client_format(raw_record):
+                # Archivo de deudores de Nueva Masvida (RUTDeudor;Nombre / Razón Social  Deudor;...)
+                client = parse_client_row(raw_record)
+                extracted_data = {
+                    'queue': '',
+                    'queue_id_cyber': '',
+                    'rut_number': client['rut_number'],
+                    'rut_digit': client['rut_digit'],
+                    'rut': client['rut_deudor'],
+                    'name': client['nombre_llamada'],
+                    'paternal_surname': client['apellido_paterno'],
+                    'maternal_surname': client['apellido_materno'],
+                    'personal_phone': client['fono_contacto'],
+                    'cell_phone': client['fono_secundario'],
+                    'days_overdue': '',
+                    'monthly_payment': client['deuda_cotizaciones'],
+                    'down_payment_option1': '',
+                    'process_date': '',
+                    'overdue_date1': '',
+                    'overdue_amount1': client['deuda_cotizaciones'],
+                    'email': client['email'],
+                    'card': '',
+                    'expiration_date': '',
+                    'gender': '',
+                    'url_link': client['url_link'],
+                    'menor_per_deuda': client['menor_per_deuda'],
+                    'mayor_per_deuda': client['mayor_per_deuda'],
+                    'monto_posible_compensar': '',
+                    'monto_compromiso': '',
+                    'fecha_compromiso': '',
+                    **{key: client[key] for key in (
+                        'rut_deudor', 'nombre_deudor', 'nombre_llamada', 'primer_nombre',
+                        'deuda_cotizaciones', 'n_periodos', 'ciudad', 'clasificacion_deudor',
+                        'tipo_deudor', 'estado_vigencia', 'fin_vigencia', 'tramo_deuda', 'tipo_cartera',
+                    )},
+                }
 
             elif isinstance(raw_record, dict):
                 # Resuelve campos aceptando nombres de columnas CSV (rut_deudor, fono_contacto, etc.)
