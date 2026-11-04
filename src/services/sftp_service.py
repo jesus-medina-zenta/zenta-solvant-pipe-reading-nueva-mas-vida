@@ -1,4 +1,5 @@
 import paramiko
+from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 
 from src.models.registro_txt_full import RegistroTxtFull
@@ -55,6 +56,12 @@ class SFTPService(BaseService):
         self.ssh_client = None
         self.is_connected = False
         logger.info("Desconexión SFTP exitosa (paramiko)")
+
+    def get_modified_time(self, remote_path: str) -> datetime:
+        """Fecha y hora (UTC) de la última modificación de un archivo remoto."""
+        if not self.sftp_client:
+            raise RuntimeError("Cliente SFTP no inicializado")
+        return datetime.fromtimestamp(self.sftp_client.stat(remote_path).st_mtime, tz=timezone.utc)
 
     def extract(self, remote_path: str, **kwargs) -> List[Dict[str, Any]]:
         """

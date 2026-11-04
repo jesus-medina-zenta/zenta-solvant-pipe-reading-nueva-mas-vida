@@ -4,6 +4,7 @@ from uuid import uuid4
 import os
 import csv
 import requests
+import pytz
 
 from src.services.execute_job import CloudRunService
 from src.services.gcs_service import CloudStorageService
@@ -17,6 +18,8 @@ from src.utils.client_record import is_client_format, is_employer, parse_client_
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+CHILE_TZ = pytz.timezone("America/Santiago")
 
 class Pipeline:
     """
@@ -47,6 +50,15 @@ class Pipeline:
         logger.info("Iniciando ejecución del pipeline")
 
         try:
+            # Paso 0: el cliente sube siempre el mismo nombre; si no subió uno nuevo
+            # no se vuelve a llamar a las personas del archivo anterior.
+            stale_reason = self._stale_file_reason()
+            if stale_reason:
+                logger.error(stale_reason)
+                self.errors.append(stale_reason)
+                await self._save_extraction_log(id, "NO_DATA", 0, 0, self.errors, fecha_utc, None)
+                return True
+
             # Paso 1: Extract
             logger.info("Iniciando extracción de datos")
             raw_data = self.extract()
@@ -129,6 +141,34 @@ class Pipeline:
             if self.start_time:
                 duration = (datetime.now(timezone.utc) - self.start_time).total_seconds()
                 logger.info(f"Pipeline de extracción finalizado. Duración: {duration:.2f} segundos")
+
+    def _stale_file_reason(self) -> Optional[str]:
+        """
+        Motivo por el que el archivo no se debe procesar, o None si está al día.
+        Solo se procesa un archivo modificado hoy (fecha de Chile): así no se vuelve a
+        llamar a las personas de un archivo anterior. PIPELINE_REQUIRE_TODAY_FILE=false
+        desactiva la verificación (p. ej. para una ejecución manual con un archivo antiguo).
+        Si no se puede leer la fecha, se sigue y extract() informa el problema.
+        """
+        if os.getenv("PIPELINE_REQUIRE_TODAY_FILE", "true").strip().lower() in ("0", "false", "no"):
+            return None
+        try:
+            if not self.sftp_service.is_connected and not self.sftp_service.connect():
+                return None
+            modified = self.sftp_service.get_modified_time(self.file_url)
+        except Exception as e:
+            logger.warning(f"No se pudo leer la fecha del archivo {self.file_url}: {e}")
+            return None
+        modified_day = modified.astimezone(CHILE_TZ).date()
+        today = datetime.now(CHILE_TZ).date()
+        if modified_day != today:
+            return (
+                f"ARCHIVO ANTIGUO: {self.file_url} se modificó el {modified_day.isoformat()} y hoy es "
+                f"{today.isoformat()}. No se procesa para no volver a llamar a las mismas personas; "
+                "hay que subir un archivo del día."
+            )
+        logger.info(f"Archivo del día: modificado el {modified_day.isoformat()}")
+        return None
 
     def extract(self) -> List[Dict[str, Any]]:
         """

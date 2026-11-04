@@ -3,10 +3,10 @@ numpy<2
 pandas
 pydantic==2.11.5
 pydantic-settings==2.9.1
-python-dotenv==1.0.0
+python-dotenv>=1.2.2
 
 # SFTP connection
-paramiko==3.3.1
+paramiko>=3.4.0
 
 # Google Cloud Services
 google-cloud-firestore
@@ -15,9 +15,11 @@ google-api-python-client==2.108.0
 google-auth==2.23.4
 
 # HTTP requests
-requests==2.31.0
+requests>=2.33.0
 
 # File processing
-pyarrow==14.0.2
+pyarrow>=17.0.0
 openpyxl==3.1.2
 
+# Horario de Chile (verificación de archivo del día)
+pytz
